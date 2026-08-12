@@ -1,0 +1,28 @@
+# Build artifacts
+build/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.pyc
+
+# Compiled binaries
+caraxes
+hello
+s
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Core dumps / crash artifacts
+core
+core.*
