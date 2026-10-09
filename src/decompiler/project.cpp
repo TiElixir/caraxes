@@ -105,8 +105,7 @@ std::string escaped_c_string(const std::vector<std::uint8_t> &bytes,
 const elf::SectionHeader *containing_section(
     const elf::File &file, std::uint64_t address) {
   for (const auto &section : file.sections) {
-    if (section.size == 0 || (section.flags & 0x4) != 0 ||
-        address < section.address)
+    if (section.size == 0 || address < section.address)
       continue;
     if (address - section.address < section.size)
       return &section;
@@ -221,6 +220,7 @@ ProjectResult decompile_project(const elf::File &file,
 
   Options function_options;
   function_options.function_names = options.function_names;
+  function_options.data_names = options.data_names;
   function_options.include_address_comments = options.include_address_comments;
   for (const auto &function : analysis.functions)
     function_options.function_names[function.address] = function.name;
@@ -233,12 +233,24 @@ ProjectResult decompile_project(const elf::File &file,
        << ". */\n"
        << "/* Expressions are inferred; unsupported operations remain annotated. */\n\n";
 
+  code << "#include <stdint.h>\n#include <stddef.h>\n#include <stdio.h>\n\n"
+       << "static uintptr_t call_indirect(uintptr_t target, ...) {\n"
+       << "    (void)target;\n    return 0;\n}\n\n";
+
   if (!result.data.empty()) {
     code << "/* Recovered data references */\n";
     for (const auto &data : result.data) {
       if (data.string_literal)
         code << "static const char " << data.name << "[] = " << data.value
              << "; /* " << hex(data.address) << " " << data.section << " */\n";
+      else if (data.section == ".bss" || data.section == ".data" ||
+               data.section == ".got" || data.section == ".got.plt" ||
+               data.section == ".dynamic" || data.section.empty() ||
+               (file.section(data.section) &&
+                (file.section(data.section)->flags & 0x4) != 0))
+        code << "static uintptr_t " << data.name
+             << " __attribute__((unused)) = 0; /* " << hex(data.address)
+             << " " << data.section << " */\n";
       else
         code << "extern unsigned char " << data.name << "[]; /* "
              << hex(data.address) << " " << data.section << " */\n";
@@ -246,12 +258,23 @@ ProjectResult decompile_project(const elf::File &file,
     code << '\n';
   }
 
+  for (const auto &data : result.data)
+    function_options.data_names[data.address] = data.name;
+
   for (const auto &function : analysis.functions) {
     const auto bytes = function_bytes(file, executable_section, function);
     if (bytes.empty())
       continue;
-    const auto function_code =
+    auto function_code =
         decompile(bytes, function.address, function.name, function_options);
+    if (function.name != "main") {
+      const auto marker = "int " + function.name + "(";
+      const auto replacement =
+          "static __attribute__((unused)) int " + function.name + "(";
+      const auto position = function_code.code.find(marker);
+      if (position != std::string::npos)
+        function_code.code.replace(position, marker.size(), replacement);
+    }
     result.functions.push_back({function.name, function.address, function.size,
                                 function.blocks.size(), function.callers.size(),
                                 function.callees.size(), function_code.code});

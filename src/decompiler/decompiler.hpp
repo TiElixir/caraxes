@@ -11,6 +11,7 @@ struct Options {
   // Names recovered from ELF symbols or a prior analysis pass. Calls whose
   // targets are not present here receive a stable sub_<address> name.
   std::map<std::uint64_t, std::string> function_names;
+  std::map<std::uint64_t, std::string> data_names;
   bool include_address_comments{true};
 };
 

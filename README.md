@@ -154,6 +154,31 @@ Generate the full native recovery output:
 ./build/caraxes decompile ./hello --section .text
 ```
 
+## Round-trip validation
+
+The repository includes an end-to-end behavior test for the sample program. It
+compiles `hello.c`, executes the original binary, recovers `recovered.c` with
+Caraxes, compiles the recovered source with strict warnings, executes it, and
+compares stdout, stderr, and exit status.
+
+Run it through CTest:
+
+```bash
+ctest --test-dir build -R roundtrip --output-on-failure
+```
+
+Run the procedure directly:
+
+```bash
+python3 tests/roundtrip_test.py build/caraxes hello.c
+```
+
+The recovered file is generated in a temporary directory for the test and is
+not treated as a repository source file. The renderer adds the required C
+headers, declares recovered globals and pseudo-register state, provides safe
+fallbacks for unresolved indirect operations, and keeps unsupported native
+instructions as comments so the generated translation unit remains compilable.
+
 The `decompile` command includes recovered data declarations, all discovered
 functions, address comments, CFG-derived function metadata, direct imported
 call names, and explicit instruction-level fallbacks.
@@ -239,7 +264,8 @@ ctest --test-dir build --output-on-failure
 
 The test suite covers ELF header/table validation, extended numbering,
 relocations, `SHT_NOBITS`, Capstone flow metadata, function discovery, CFG
-edges, argument inference, arithmetic recovery, and project JSON output.
+edges, argument inference, arithmetic recovery, project JSON output, and the
+compile/recover/recompile/runtime-output round trip.
 
 For an additional sanitizer pass:
 

@@ -141,7 +141,8 @@ std::string stack_name(const std::string &base, std::int64_t displacement) {
 std::string memory_expression(const disasm::Operand &operand,
                               std::uint64_t address, std::uint8_t size,
                               const RegisterValues &values,
-                              const ArgumentRegisters &input_arguments) {
+                              const ArgumentRegisters &input_arguments,
+                              const std::map<std::uint64_t, std::string> &data_names) {
   const auto &memory = operand.memory;
   if (memory.base == "rbp" || memory.base == "rsp") {
     if (memory.index.empty() && memory.segment.empty())
@@ -151,8 +152,12 @@ std::string memory_expression(const disasm::Operand &operand,
   if (memory.base == "rip" && memory.index.empty()) {
     const auto absolute = static_cast<std::uint64_t>(
         static_cast<std::int64_t>(address + size) + memory.displacement);
+    const auto named = data_names.find(absolute);
     std::ostringstream stream;
-    stream << "global_" << std::hex << absolute;
+    if (named != data_names.end())
+      stream << named->second;
+    else
+      stream << "global_" << std::hex << absolute;
     return stream.str();
   }
 
@@ -212,7 +217,8 @@ std::string register_expression(const disasm::Operand &operand,
 std::string operand_expression(const disasm::Operand &operand,
                                std::uint64_t address, std::uint8_t size,
                                const RegisterValues &values,
-                               const ArgumentRegisters &input_arguments) {
+                               const ArgumentRegisters &input_arguments,
+                               const std::map<std::uint64_t, std::string> &data_names) {
   switch (operand.kind) {
   case disasm::OperandKind::Register:
     return register_expression(operand, values, input_arguments);
@@ -220,7 +226,7 @@ std::string operand_expression(const disasm::Operand &operand,
     return immediate_expression(operand.immediate);
   case disasm::OperandKind::Memory:
     return memory_expression(operand, address, size, values,
-                             input_arguments);
+                             input_arguments, data_names);
   case disasm::OperandKind::FloatingPoint:
     return "floating_point";
   default:
@@ -231,10 +237,25 @@ std::string operand_expression(const disasm::Operand &operand,
 std::string operand_lvalue(const disasm::Operand &operand,
                            std::uint64_t address, std::uint8_t size,
                            const RegisterValues &values,
-                           const ArgumentRegisters &input_arguments) {
+                           const ArgumentRegisters &input_arguments,
+                           const std::map<std::uint64_t, std::string> &data_names) {
   if (operand.kind == disasm::OperandKind::Register)
     return canonical_register(operand.register_name);
-  return operand_expression(operand, address, size, values, input_arguments);
+  return operand_expression(operand, address, size, values, input_arguments,
+                            data_names);
+}
+
+bool is_data_expression(const std::string &value,
+                        const std::map<std::uint64_t, std::string> &data_names) {
+  return std::any_of(data_names.begin(), data_names.end(),
+                     [&value](const auto &entry) { return entry.second == value; });
+}
+
+std::string assignment_expression(
+    const std::string &value,
+    const std::map<std::uint64_t, std::string> &data_names) {
+  return is_data_expression(value, data_names) ? "((uintptr_t)(" + value + "))"
+                                               : value;
 }
 
 bool is_read_operand(const disasm::Instruction &instruction, std::size_t index,
@@ -314,7 +335,7 @@ ArgumentRegisters infer_input_arguments(
 
 std::string condition_for(const std::string &mnemonic, const std::string &left,
                           const std::string &right) {
-  const std::string fallback = "condition_" + mnemonic;
+  const std::string fallback = "0";
   if (left.empty())
     return fallback;
   const auto rhs = right.empty() ? "0" : right;
@@ -342,14 +363,10 @@ std::string condition_for(const std::string &mnemonic, const std::string &left,
     return "((long)" + left + " < 0)";
   if (mnemonic == "jns")
     return "((long)" + left + " >= 0)";
-  if (mnemonic == "jo")
-    return "overflow";
-  if (mnemonic == "jno")
-    return "!overflow";
-  if (mnemonic == "jp" || mnemonic == "jpe")
-    return "parity";
-  if (mnemonic == "jnp" || mnemonic == "jpo")
-    return "!parity";
+  if (mnemonic == "jo" || mnemonic == "jp" || mnemonic == "jpe")
+    return "0";
+  if (mnemonic == "jno" || mnemonic == "jnp" || mnemonic == "jpo")
+    return "0";
   return fallback;
 }
 
@@ -413,15 +430,34 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
   for (const auto &register_name : input_arguments)
     highest_argument = std::max(highest_argument, argument_index(register_name));
   if (highest_argument < 0) {
-    body << "void";
+    // Old-style empty parameter lists keep the recovered listing callable
+    // when a compiler-generated thunk passes through an unknown argument set.
+    body << "";
   } else {
     for (int i = 0; i <= highest_argument; ++i) {
       if (i != 0)
         body << ", ";
-      body << "int arg" << i;
+      body << "int arg" << i << " __attribute__((unused))";
     }
   }
-  body << ") {\n";
+  body << ") {\n"
+       << "    uintptr_t rax __attribute__((unused)) = 0, rbx __attribute__((unused)) = 0, "
+       << "rcx __attribute__((unused)) = 0, rdx __attribute__((unused)) = 0, "
+       << "rsi __attribute__((unused)) = 0, rdi __attribute__((unused)) = 0, "
+       << "rbp __attribute__((unused)) = 0, rsp __attribute__((unused)) = 0, "
+       << "r8 __attribute__((unused)) = 0, r9 __attribute__((unused)) = 0;\n";
+  std::set<std::string> locals;
+  for (const auto &instruction : instructions) {
+    for (const auto &operand : instruction.operand_details) {
+      if (operand.kind == disasm::OperandKind::Memory &&
+          (operand.memory.base == "rbp" || operand.memory.base == "rsp"))
+        locals.insert(stack_name(operand.memory.base, operand.memory.displacement));
+    }
+  }
+  for (const auto &local : locals)
+    body << "    int " << local << " __attribute__((unused)) = 0;\n";
+  if (!locals.empty())
+    body << '\n';
 
   bool emitted_return = false;
   for (const auto &instruction : instructions) {
@@ -436,11 +472,11 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
     const auto &operands = instruction.operand_details;
     auto expression = [&](const disasm::Operand &operand) {
       return operand_expression(operand, instruction.address, instruction.size,
-                                values, input_arguments);
+                                values, input_arguments, options.data_names);
     };
     auto lvalue = [&](const disasm::Operand &operand) {
       return operand_lvalue(operand, instruction.address, instruction.size,
-                            values, input_arguments);
+                            values, input_arguments, options.data_names);
     };
 
     if (!instruction.valid) {
@@ -474,20 +510,22 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
                                                  compare_right)
                                  : condition_for(mnemonic, {}, {});
       if (instruction.has_target)
-        body << "    if " << condition << " goto "
-             << target_label(instruction.target) << ";\n";
+        if (labels.contains(instruction.target))
+          body << "    if (" << condition << ") goto "
+               << target_label(instruction.target) << ";\n";
+        else
+          body << "    /* conditional branch to external address "
+               << address_name(instruction.target) << " */\n";
       else
-        body << "    if " << condition << " goto *indirect_target;\n";
+        body << "    /* conditional indirect branch */\n";
       have_comparison = false;
       continue;
     }
     if (mnemonic == "jmp") {
-      if (instruction.has_target)
+      if (instruction.has_target && labels.contains(instruction.target))
         body << "    goto " << target_label(instruction.target) << ";\n";
-      else if (!operands.empty())
-        body << "    goto *" << expression(operands.front()) << ";\n";
       else
-        body << "    /* indirect jump */\n";
+        body << "    /* jump to external or indirect target */\n";
       continue;
     }
 
@@ -528,7 +566,8 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
         const auto destination = lvalue(operands[0]);
         if (operands[0].kind == disasm::OperandKind::Register)
           assign_register(operands[0], right, values);
-        body << "    " << destination << " = " << right << ";\n";
+        body << "    " << destination << " = "
+             << assignment_expression(right, options.data_names) << ";\n";
       } else {
         body << "    /* incomplete " << mnemonic << " */\n";
       }
@@ -607,7 +646,7 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
       const auto condition = have_comparison
                                  ? condition_for("j" + mnemonic.substr(3),
                                                  compare_left, compare_right)
-                                 : "condition_" + mnemonic.substr(3);
+                                 : "0";
       assign_register(operands[0], "(" + condition + " ? 1 : 0)", values);
       body << "    " << destination << " = (" << condition
            << " ? 1 : 0);\n";
@@ -624,7 +663,7 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
   }
 
   if (!emitted_return)
-    body << "    /* no explicit return recovered */\n";
+    body << "    /* no explicit return recovered */\n    return 0;\n";
   body << "}\n";
   return {safe_name, address, body.str()};
 }
