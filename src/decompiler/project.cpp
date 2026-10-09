@@ -66,6 +66,25 @@ std::string identifier(std::string value, std::uint64_t address) {
   return value;
 }
 
+std::string call_name(std::uint64_t address,
+                      const std::map<std::uint64_t, std::string> &names) {
+  const auto named = names.find(address);
+  if (named != names.end())
+    return identifier(named->second, address);
+  std::ostringstream stream;
+  stream << "sub_" << std::hex << address;
+  return stream.str();
+}
+
+bool has_standard_declaration(const std::string &name) {
+  static const std::set<std::string> names{
+      "printf", "fprintf", "sprintf", "snprintf", "puts", "putchar",
+      "malloc", "calloc", "realloc", "free", "memcpy", "memmove",
+      "memset", "memcmp", "strcmp", "strncmp", "strlen", "abort",
+      "exit", "atexit"};
+  return names.contains(name);
+}
+
 std::string escaped_c_string(const std::vector<std::uint8_t> &bytes,
                              std::size_t start) {
   std::ostringstream stream;
@@ -236,6 +255,21 @@ ProjectResult decompile_project(const elf::File &file,
   code << "#include <stdint.h>\n#include <stddef.h>\n#include <stdio.h>\n\n"
        << "static uintptr_t call_indirect(uintptr_t target, ...) {\n"
        << "    (void)target;\n    return 0;\n}\n\n";
+
+  std::set<std::uint64_t> defined_addresses;
+  std::set<std::string> fallback_calls;
+  for (const auto &function : analysis.functions)
+    defined_addresses.insert(function.address);
+  for (const auto &xref : analysis.xrefs) {
+    if (xref.kind != "call" || defined_addresses.contains(xref.to))
+      continue;
+    const auto name = call_name(xref.to, options.function_names);
+    if (!has_standard_declaration(name) && fallback_calls.insert(name).second)
+      code << "static uintptr_t " << name
+           << "(uintptr_t value, ...) { (void)value; return 0; }\n";
+  }
+  if (!fallback_calls.empty())
+    code << '\n';
 
   if (!result.data.empty()) {
     code << "/* Recovered data references */\n";

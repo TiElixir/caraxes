@@ -339,6 +339,14 @@ std::string condition_for(const std::string &mnemonic, const std::string &left,
   if (left.empty())
     return fallback;
   const auto rhs = right.empty() ? "0" : right;
+  if (left == rhs) {
+    if (mnemonic == "je" || mnemonic == "jz" || mnemonic == "jge" ||
+        mnemonic == "jle" || mnemonic == "jae" || mnemonic == "jbe")
+      return "1";
+    if (mnemonic == "jne" || mnemonic == "jnz" || mnemonic == "jg" ||
+        mnemonic == "jl" || mnemonic == "ja" || mnemonic == "jb")
+      return "0";
+  }
   if (mnemonic == "je" || mnemonic == "jz")
     return "(" + left + " == " + rhs + ")";
   if (mnemonic == "jne" || mnemonic == "jnz")
@@ -377,9 +385,11 @@ std::string target_label(std::uint64_t target) {
 }
 
 std::string call_arguments(const RegisterValues &values,
-                           const ArgumentRegisters &input_arguments) {
+                           const ArgumentRegisters &input_arguments,
+                           std::size_t maximum_arguments = 6) {
   int last = -1;
-  for (std::size_t i = 0; i < argument_registers().size(); ++i) {
+  for (std::size_t i = 0;
+       i < argument_registers().size() && i < maximum_arguments; ++i) {
     const auto &register_name = argument_registers()[i];
     if (values.contains(register_name) || input_arguments.contains(register_name))
       last = static_cast<int>(i);
@@ -531,9 +541,17 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
 
     if (instruction.is_call) {
       std::string call;
+      std::size_t argument_limit = argument_registers().size();
       if (instruction.has_target) {
-        call = subroutine_name(instruction.target, options) + "(" +
-               call_arguments(values, input_arguments) + ")";
+        const auto callee = subroutine_name(instruction.target, options);
+        if (callee == "printf" || callee == "puts" || callee == "putchar")
+          argument_limit = callee == "printf" ? 2 : 1;
+        else if (callee == "fprintf" || callee == "sprintf")
+          argument_limit = 3;
+        else if (callee == "snprintf")
+          argument_limit = 4;
+        call = callee + "(" +
+               call_arguments(values, input_arguments, argument_limit) + ")";
       } else if (!operands.empty()) {
         call = "call_indirect(" + expression(operands.front()) + ")";
       } else {
