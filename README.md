@@ -1,9 +1,17 @@
+
 # Caraxes
 
-Caraxes is a self-contained, CLI-first reverse-engineering toolkit for Linux
-ELF64 x86-64 binaries. It provides the core workflow expected from a native
-static-analysis workbench without delegating analysis to an external
-decompiler:
+<table>
+  <tr>
+    <td width="240" align="center" valign="middle">
+      <img src="https://github.com/user-attachments/assets/8f2b99da-6573-4d9d-8810-537af607d3f5" width="220" alt="Caraxes logo" />
+    </td>
+    <td valign="middle">
+      <p><strong>Caraxes</strong> is a self-contained, CLI-first reverse-engineering toolkit for Linux ELF64 x86-64 binaries.</p>
+      <p>It provides the core workflow expected from a native static-analysis workbench without delegating analysis to an external decompiler.</p>
+    </td>
+  </tr>
+</table>
 
 ```text
 ELF loader → Capstone disassembly → function/CFG analysis
