@@ -241,7 +241,8 @@ ProjectResult decompile_project(const elf::File &file,
     code << "/* Recovered data references */\n";
     for (const auto &data : result.data) {
       if (data.string_literal)
-        code << "static const char " << data.name << "[] = " << data.value
+        code << "static const char " << data.name
+             << "[] __attribute__((unused)) = " << data.value
              << "; /* " << hex(data.address) << " " << data.section << " */\n";
       else if (data.section == ".bss" || data.section == ".data" ||
                data.section == ".got" || data.section == ".got.plt" ||
@@ -267,10 +268,10 @@ ProjectResult decompile_project(const elf::File &file,
       continue;
     auto function_code =
         decompile(bytes, function.address, function.name, function_options);
-    if (function.name != "main") {
-      const auto marker = "int " + function.name + "(";
+    if (function_code.name != "main") {
+      const auto marker = "int " + function_code.name + "(";
       const auto replacement =
-          "static __attribute__((unused)) int " + function.name + "(";
+          "static __attribute__((unused)) int " + function_code.name + "(";
       const auto position = function_code.code.find(marker);
       if (position != std::string::npos)
         function_code.code.replace(position, marker.size(), replacement);
