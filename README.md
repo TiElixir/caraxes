@@ -13,114 +13,134 @@
   </tr>
 </table>
 
+<p align="left">
+  <a href="https://isocpp.org/"><img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=c%2B%2B&logoColor=white" alt="C++20" /></a>
+  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/CMake-3.20%2B-064F8C?style=flat-square&logo=cmake&logoColor=white" alt="CMake 3.20 or newer" /></a>
+  <a href="https://www.capstone-engine.org/"><img src="https://img.shields.io/badge/Capstone-x86--64-4C8BF5?style=flat-square" alt="Capstone x86-64" /></a>
+  <a href="https://www.kernel.org/"><img src="https://img.shields.io/badge/platform-Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux" /></a>
+  <img src="https://img.shields.io/badge/engine-Caraxes%20native-8A2BE2?style=flat-square" alt="Caraxes native engine" />
+</p>
+
 ```text
 ELF loader → Capstone disassembly → function/CFG analysis
            → symbols/relocations/xrefs → native C-like recovery
 ```
 
-The project is intentionally inspectable. Every recovered function is tied to
-an address range, every CFG edge is explicit, and unsupported instructions are
-preserved as annotated output instead of being silently guessed away.
+Caraxes is built as an inspectable analysis pipeline. Functions retain address
+provenance, CFG edges remain explicit, and unsupported instructions are emitted
+as annotated evidence rather than silently converted into guesses.
 
-## Features
+## At a glance
 
-### ELF and binary metadata
+| Area | What Caraxes provides |
+| --- | --- |
+| Binary format | Bounds-checked ELF32/ELF64 headers, sections, segments, symbols, relocations, and `SHT_NOBITS` data |
+| Disassembly | Capstone-backed x86-64 instructions, bytes, operands, targets, and invalid-byte preservation |
+| Analysis | Function discovery, recursive CFGs, callers/callees, callgraph edges, and data xrefs |
+| Recovery | Native register, stack-local, arithmetic, branch, call, and string/global recovery |
+| Automation | Text reports, JSON artifacts, strict GCC round-trip testing, and sanitizer coverage |
 
-- ELF32/ELF64 parsing with little- and big-endian integer decoding
-- Extended ELF numbering support for large program/section tables
-- Bounds and overflow validation for headers, tables, string tables, and data
-- Program-header and section inspection
-- Static and dynamic symbol extraction
-- REL/RELA relocation decoding
-- x86-64 PLT name resolution for imported calls
+## Quick start
+
+Install dependencies, configure, build, and run the complete test workflow:
+
+```bash
+# Debian / Ubuntu
+sudo apt install build-essential cmake libcapstone-dev pkg-config
+
+cmake -S . -B build
+make -C build test
+```
+
+`make test` builds Caraxes and its test executables before running CTest. The
+round-trip test compiles the current `hello.c`, recovers `recovered.c`, compiles
+the recovered source with GCC and `-Wall -Wextra -Werror`, then compares both
+programs using deterministic input.
+
+## Capabilities
+
+### ELF metadata
+
+- Little- and big-endian ELF32/ELF64 integer decoding
+- Extended numbering for large program and section tables
+- Bounds and overflow validation before every binary-owned read
+- Program headers, sections, symbols, and REL/RELA relocations
+- x86-64 PLT/import name recovery
 - Virtual-address/file-offset conversion
-- Printable-string extraction and bounded hexdumps
-- Zero-filled `.bss`/`SHT_NOBITS` section access
+- Printable strings, bounded hexdumps, and zero-filled `.bss` access
 
 ### Disassembly and analysis
 
-- Capstone x86-64 decoding with raw bytes, Intel syntax, and operand metadata
-- Register, immediate, memory, and RIP-relative operand details
+- Intel-style x86-64 disassembly with raw instruction bytes
+- Register, immediate, memory, and RIP-relative operand metadata
 - Explicit invalid-byte records when decoding fails
-- Function discovery from entry points, symbols, direct calls, `endbr64`, and
-  common function prologues
-- Recursive reachable-control-flow analysis
+- Function seeds from entry points, symbols, direct calls, `endbr64`, and
+  common compiler prologues
+- Recursive reachable-control-flow traversal
 - Basic blocks with predecessor and successor edges
-- Direct call graph
-- Call, branch, and RIP-relative data cross-references
-- Deterministic textual reports and JSON summaries
+- Direct callgraph and call-site cross-references
+- Branch and RIP-relative data references
+- Deterministic terminal reports and JSON summaries
 
-### Native C-like recovery
+### Native recovery
 
-The recovery engine is implemented inside Caraxes. It does not invoke another
-reverse-engineering product, shell out to an external analyzer, or require a
-runtime beyond C++ and Capstone.
+The recovery engine runs entirely inside Caraxes. It does not invoke another
+reverse-engineering product or shell out to an external analyzer.
 
-It currently recovers:
+It recovers common System V AMD64 patterns including:
 
-- System V AMD64 integer arguments from register use
-- Register aliases such as `eax`/`rax` and `edi`/`rdi`
-- Constant propagation and register assignments
+- Integer arguments and register aliases (`eax`/`rax`, `edi`/`rdi`)
+- Constant propagation and register-transfer expressions
 - Integer arithmetic, shifts, comparisons, tests, and zeroing idioms
-- `rbp`/`rsp` stack locals
-- RIP-relative globals and printable string literals
-- Direct and indirect calls
-- Conditional branches, labels, returns, and explicit indirect jumps
-- Function names, sizes, callers, callees, data references, and CFG metadata
+- `rbp`/`rsp` stack locals and address-taking for input pointers
+- RIP-relative globals and printable format strings
+- Direct calls with inferred internal arity
+- Format-aware `printf`/`scanf` argument emission
+- Conditional branches, labels, returns, and safe indirect fallbacks
 
-When a higher-level reconstruction would require unsupported assumptions, the
-output retains the original instruction address and emits a comment or a
-low-level expression. This keeps the result useful for further analysis while
-making uncertainty visible.
+When source-level reconstruction would require unsupported assumptions, the
+output keeps the machine-level instruction comment and marks the uncertainty.
 
 ## Requirements
 
 - Linux x86-64
-- C++20 compiler
+- GCC or another C++20 compiler
 - CMake 3.20 or newer
-- Capstone 5 development headers and library
-- `pkg-config` is recommended; CMake also supports manual Capstone discovery
+- GNU Make or another CMake-supported build tool
+- Capstone development headers and library
+- Python 3 for the round-trip test
+- `pkg-config` recommended for Capstone discovery
 
 Arch Linux:
 
 ```bash
-sudo pacman -S --needed base-devel cmake capstone pkgconf
+sudo pacman -S --needed base-devel cmake capstone pkgconf python
 ```
 
 Debian or Ubuntu:
 
 ```bash
-sudo apt install build-essential cmake libcapstone-dev pkg-config
+sudo apt install build-essential cmake libcapstone-dev pkg-config python3
 ```
 
-## Build and test
-
-From the repository root:
-
-```bash
-cmake -S . -B build
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-```
-
-The build produces:
+## Build outputs
 
 | Binary | Purpose |
 | --- | --- |
 | `build/caraxes` | Unified loader, disassembler, analyzer, and native recovery CLI |
-| `build/caraxes-analysis` | Standalone function/CFG/xref report |
+| `build/caraxes-analysis` | Standalone function, CFG, and xref report |
 | `build/caraxes-disasm` | Standalone Capstone disassembler |
 
-## CLI usage
+## Command reference
 
-General help:
+### General
 
 ```bash
 ./build/caraxes --help
 ./build/caraxes --version
 ```
 
-Inspect the binary:
+### Inspect an ELF
 
 ```bash
 ./build/caraxes info ./hello
@@ -133,75 +153,32 @@ Inspect the binary:
 ./build/caraxes hexdump ./hello --limit 256
 ```
 
-Disassemble an executable section:
+### Disassemble and analyze
 
 ```bash
-./build/caraxes disasm ./hello
 ./build/caraxes disasm ./hello --section .text
-./build/caraxes-disasm ./hello .text
-```
-
-Analyze functions and relationships:
-
-```bash
-./build/caraxes functions ./hello
 ./build/caraxes functions ./hello --json
 ./build/caraxes cfg ./hello
 ./build/caraxes callgraph ./hello
 ./build/caraxes xrefs ./hello
 ./build/caraxes report ./hello
 ./build/caraxes-analysis ./hello
+./build/caraxes-disasm ./hello .text
 ```
 
-Generate the full native recovery output:
+### Recover C-like output
 
 ```bash
-./build/caraxes decompile ./hello > recovered.c
 ./build/caraxes decompile ./hello --output recovered.c
 ./build/caraxes decompile ./hello --json --output recovered.json
 ./build/caraxes decompile ./hello --section .text
 ```
 
-## Round-trip validation
+The generated source includes C headers, recovered data declarations, pseudo-
+register state, stack locals, function metadata, address comments, imported
+call names, and compilable fallbacks for unsupported operations.
 
-The repository includes an end-to-end behavior test for the sample program. It
-compiles `hello.c` with GCC, executes the original binary, recovers
-`recovered.c` with Caraxes, compiles the recovered source with GCC and strict
-warnings, executes it, and compares stdout, stderr, and exit status.
-The current interactive sample receives the deterministic test input `12` and
-`30`.
-
-Run it through CTest:
-
-```bash
-ctest --test-dir build -R roundtrip --output-on-failure
-```
-
-For a complete fresh-build verification, CMake wires the generated `make test`
-target to build Caraxes and all test executables before running CTest:
-
-```bash
-cmake -S . -B build
-make -C build test
-```
-
-Run the procedure directly:
-
-```bash
-python3 tests/roundtrip_test.py build/caraxes hello.c
-```
-
-The recovered file is generated in a temporary directory for the test and is
-not treated as a repository source file. The renderer adds the required C
-headers, declares recovered globals and pseudo-register state, provides safe
-fallbacks for unresolved indirect operations, and keeps unsupported native
-instructions as comments so the generated translation unit remains compilable.
-
-The `decompile` command includes recovered data declarations, all discovered
-functions, address comments, CFG-derived function metadata, direct imported
-call names, and explicit instruction-level fallbacks.
-
-For the repository sample, the `add` function is recovered in the form:
+Example recovered arithmetic:
 
 ```c
 int add(int arg0, int arg1) {
@@ -212,87 +189,103 @@ int add(int arg0, int arg1) {
 }
 ```
 
-The JSON decompile schema contains:
+## Round-trip validation
 
-- `schema_version` and `engine` (`caraxes-native`)
-- executable format and analyzed section
-- `functions` with names, addresses, sizes, block/caller/callee counts, and
-  recovered code
-- `data` with names, addresses, section names, and recovered string literals
+Run the complete compile → recover → compile → compare procedure:
+
+```bash
+cmake -S . -B build
+make -C build test
+```
+
+Run only the end-to-end test:
+
+```bash
+ctest --test-dir build -R roundtrip --output-on-failure
+```
+
+Or invoke the procedure directly:
+
+```bash
+python3 tests/roundtrip_test.py build/caraxes hello.c
+```
+
+The current interactive sample is tested with `12` and `30`, producing:
+
+```text
+Enter a number: Enter another number: The sum of 12 and 30 is: 42
+```
+
+The test compares stdout, stderr, and exit status between the original and
+recovered executables. Its generated files live in a temporary directory.
+
+## JSON output
+
+`decompile --json` emits a `caraxes-native` artifact containing:
+
+- `schema_version`, `engine`, executable format, and analyzed section
+- `functions` with names, addresses, sizes, block/caller/callee counts, and code
+- `data` with addresses, names, sections, and recovered string literals
 - `xrefs` with source, destination, and reference kind
-- the complete rendered `code` output
+- the complete rendered `code` field
 
 ## Architecture
 
 ```text
 src/
 ├── loader/elf/       ELF model, validation, symbols, relocations
-├── disasm/           Capstone decoder and project-owned operand records
-├── analysis/         Function discovery, CFG, callers/callees, xrefs, IR
-├── decompiler/       Register recovery and complete project output
+├── disasm/           Capstone decoder and operand records
+├── analysis/         Function discovery, CFG, xrefs, callers/callees, IR
+├── decompiler/       Register recovery and complete project renderer
 └── main.cpp          CLI presentation and command dispatch
 tests/
 ├── elf_loader_test.cpp
 ├── disasm_test.cpp
 ├── analysis_test.cpp
-└── decompiler_test.cpp
+├── decompiler_test.cpp
+└── roundtrip_test.py
 ```
 
-The core layers are separate:
+The pipeline is deliberately layered:
 
-1. The loader validates file-owned offsets and exposes ELF structures.
-2. The disassembler converts executable bytes to stable Caraxes records.
-3. The analyzer builds function and CFG records without relying on symbols
-   being present.
-4. The decompiler performs deterministic expression and stack recovery.
-5. The project renderer combines functions, data, xrefs, and metadata into a
-   complete C-like text or JSON artifact.
-6. The CLI formats those artifacts for terminal use and shell pipelines.
+1. The loader validates and exposes ELF structures.
+2. The disassembler creates stable Caraxes instruction records.
+3. The analyzer discovers functions and builds CFG/xref records.
+4. The native decompiler recovers expressions, locals, calls, and returns.
+5. The project renderer combines code, data, metadata, and JSON output.
+6. The CLI exposes the results for terminal use and shell pipelines.
 
 ## Accuracy and boundaries
 
 Caraxes is static analysis software. It does not execute the input binary and
 does not claim that inferred output is the original source. Compilation can
-remove or transform:
+remove or transform original names, exact types, signedness, comments, macros,
+structured loops, switch statements, and runtime indirect targets.
 
-- original local and parameter names
-- exact source types, signedness, aliases, and ownership
-- comments, macros, templates, and compiler intent
-- structured loops and `switch` statements
-- runtime-dispatched indirect targets
+Function discovery is strongest when symbols, relocations, or direct calls are
+available. Optimized, stripped, obfuscated, and self-modifying programs may
+produce more low-level output. Indirect calls and jumps remain explicitly
+marked when instruction bytes do not identify a unique destination.
 
-Function discovery is strongest when symbols, relocation data, or direct call
-targets are available. Optimized, stripped, obfuscated, or self-modifying
-programs require additional heuristics and may leave more low-level output.
-Indirect calls and jumps remain explicitly marked when instruction bytes do not
-provide a unique destination.
-
-The analysis and native recovery target is currently ELF64 x86-64. The loader
-can inspect ELF32 and big-endian metadata, while architecture-specific
-disassembly and recovery intentionally reject unsupported machine formats.
+The architecture-specific analysis target is currently ELF64 x86-64. The
+loader can inspect broader ELF metadata, while disassembly and recovery reject
+unsupported machine formats.
 
 ## Development verification
 
-Standard tests:
+Standard suite:
 
 ```bash
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+make -C build test
 ```
 
-The test suite covers ELF header/table validation, extended numbering,
-relocations, `SHT_NOBITS`, Capstone flow metadata, function discovery, CFG
-edges, argument inference, arithmetic recovery, project JSON output, and the
-compile/recover/recompile/runtime-output round trip.
-
-For an additional sanitizer pass:
+Sanitizer suite:
 
 ```bash
 cmake -S . -B build-sanitize \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
-cmake --build build-sanitize --parallel
-ctest --test-dir build-sanitize --output-on-failure
+make -C build-sanitize test
 ```
 
 ## License
