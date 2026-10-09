@@ -34,7 +34,7 @@ def main() -> int:
 
     caraxes = pathlib.Path(sys.argv[1]).resolve()
     source = pathlib.Path(sys.argv[2]).resolve()
-    compiler = os.environ.get("CC", "cc")
+    compiler = os.environ.get("CC", "gcc")
 
     with tempfile.TemporaryDirectory(prefix="caraxes-roundtrip-") as directory:
         work = pathlib.Path(directory)

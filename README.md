@@ -157,9 +157,9 @@ Generate the full native recovery output:
 ## Round-trip validation
 
 The repository includes an end-to-end behavior test for the sample program. It
-compiles `hello.c`, executes the original binary, recovers `recovered.c` with
-Caraxes, compiles the recovered source with strict warnings, executes it, and
-compares stdout, stderr, and exit status.
+compiles `hello.c` with GCC, executes the original binary, recovers
+`recovered.c` with Caraxes, compiles the recovered source with GCC and strict
+warnings, executes it, and compares stdout, stderr, and exit status.
 
 Run it through CTest:
 
