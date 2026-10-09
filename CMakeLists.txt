@@ -55,6 +55,7 @@ target_link_libraries(caraxes-disasm PRIVATE caraxes_disasm)
 
 include(CTest)
 if(BUILD_TESTING)
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
   add_executable(caraxes_elf_tests tests/elf_loader_test.cpp)
   target_link_libraries(caraxes_elf_tests PRIVATE caraxes_elf)
   add_test(NAME elf_loader COMMAND caraxes_elf_tests)
@@ -67,4 +68,9 @@ if(BUILD_TESTING)
   add_executable(caraxes_decompiler_tests tests/decompiler_test.cpp)
   target_link_libraries(caraxes_decompiler_tests PRIVATE caraxes_decompiler caraxes_analysis)
   add_test(NAME decompiler COMMAND caraxes_decompiler_tests)
+  add_test(NAME roundtrip
+    COMMAND Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/roundtrip_test.py"
+      "$<TARGET_FILE:caraxes>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/hello.c")
 endif()

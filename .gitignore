@@ -15,6 +15,7 @@ build-*/
 caraxes
 hello
 s
+recovered.c
 
 # Editor / OS junk
 .vscode/
