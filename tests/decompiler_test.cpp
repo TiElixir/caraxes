@@ -6,7 +6,7 @@
 #include <cassert>
 #include <iostream>
 
-int main() {
+int main(int argc, char **argv) {
   const std::vector<std::uint8_t> add{0x89, 0xf8, 0x01, 0xf0, 0xc3};
   const auto result = caraxes::decompiler::decompile(add, 0x401000, "add");
   assert(result.code.find("return") != std::string::npos);
@@ -26,7 +26,7 @@ int main() {
   assert(recovered_branch.code.find("goto loc_") != std::string::npos);
   assert(recovered_branch.code.find("arg0") != std::string::npos);
 
-  const auto file = caraxes::elf::parse_file("../hello");
+  const auto file = caraxes::elf::parse_file(argc > 1 ? argv[1] : "../hello");
   const auto *text = file.section(".text");
   assert(text != nullptr);
   const auto project = caraxes::decompiler::decompile_project(

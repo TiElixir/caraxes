@@ -58,19 +58,33 @@ if(BUILD_TESTING)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
   add_executable(caraxes_elf_tests tests/elf_loader_test.cpp)
   target_link_libraries(caraxes_elf_tests PRIVATE caraxes_elf)
-  add_test(NAME elf_loader COMMAND caraxes_elf_tests)
+  add_test(NAME elf_loader COMMAND caraxes_elf_tests
+    "${CMAKE_CURRENT_SOURCE_DIR}/hello")
   add_executable(caraxes_analysis_tests tests/analysis_test.cpp)
   target_link_libraries(caraxes_analysis_tests PRIVATE caraxes_analysis)
   add_test(NAME analysis COMMAND caraxes_analysis_tests)
   add_executable(caraxes_disasm_tests tests/disasm_test.cpp)
   target_link_libraries(caraxes_disasm_tests PRIVATE caraxes_disasm)
-  add_test(NAME disasm COMMAND caraxes_disasm_tests)
+  add_test(NAME disasm COMMAND caraxes_disasm_tests
+    "${CMAKE_CURRENT_SOURCE_DIR}/hello")
   add_executable(caraxes_decompiler_tests tests/decompiler_test.cpp)
   target_link_libraries(caraxes_decompiler_tests PRIVATE caraxes_decompiler caraxes_analysis)
-  add_test(NAME decompiler COMMAND caraxes_decompiler_tests)
+  add_test(NAME decompiler COMMAND caraxes_decompiler_tests
+    "${CMAKE_CURRENT_SOURCE_DIR}/hello")
   add_test(NAME roundtrip
     COMMAND Python3::Interpreter
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/roundtrip_test.py"
       "$<TARGET_FILE:caraxes>"
       "${CMAKE_CURRENT_SOURCE_DIR}/hello.c")
+
+  # CMake's generated `make test` target runs CTest without first building
+  # executables. Build all artifacts as a prerequisite CTest step so a fresh
+  # build directory can run `make test` directly.
+  add_test(NAME build_test_artifacts
+    COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}"
+      --target caraxes caraxes_elf_tests caraxes_analysis_tests
+              caraxes_disasm_tests caraxes_decompiler_tests --parallel)
+  set_tests_properties(build_test_artifacts PROPERTIES FIXTURES_SETUP caraxes_build)
+  set_tests_properties(elf_loader analysis disasm decompiler roundtrip
+    PROPERTIES FIXTURES_REQUIRED caraxes_build)
 endif()

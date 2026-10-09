@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <iostream>
 
-int main() {
-  const auto file = caraxes::elf::parse_file("../hello");
+int main(int argc, char **argv) {
+  const auto file = caraxes::elf::parse_file(argc > 1 ? argv[1] : "../hello");
   assert(file.header.elf_class == caraxes::elf::Class::Elf64);
   assert(file.header.endian == caraxes::elf::Endian::Little);
   assert(file.header.machine == 62);

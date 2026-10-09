@@ -3,7 +3,7 @@
 #include <cassert>
 #include <iostream>
 
-int main() {
+int main(int argc, char **argv) {
   const std::vector<std::uint8_t> bytes{0x55, 0x48, 0x89, 0xe5, 0x5d, 0xc3};
   const auto instructions = caraxes::disasm::disassemble(bytes, 0x401000);
   assert(instructions.size() == 4);
@@ -25,7 +25,7 @@ int main() {
   const auto through_interface = caraxes::disasm::decode(decoder, bytes, 0x401000);
   assert(through_interface.size() == instructions.size());
 
-  const auto file = caraxes::elf::parse_file("../hello");
+  const auto file = caraxes::elf::parse_file(argc > 1 ? argv[1] : "../hello");
   const auto text = caraxes::disasm::disassemble_section(file);
   assert(!text.empty());
   std::cout << "Disassembler tests passed\n";

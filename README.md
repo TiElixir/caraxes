@@ -169,6 +169,14 @@ Run it through CTest:
 ctest --test-dir build -R roundtrip --output-on-failure
 ```
 
+For a complete fresh-build verification, CMake wires the generated `make test`
+target to build Caraxes and all test executables before running CTest:
+
+```bash
+cmake -S . -B build
+make -C build test
+```
+
 Run the procedure directly:
 
 ```bash
