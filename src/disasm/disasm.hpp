@@ -8,6 +8,35 @@
 
 namespace caraxes::disasm {
 
+// Capstone's C structs are deliberately kept out of the public analysis API.
+// These small value types contain the instruction facts needed by the CFG and
+// decompiler passes while keeping the rest of the project independent of a
+// particular Capstone version.
+enum class OperandKind : std::uint8_t {
+  Invalid,
+  Register,
+  Immediate,
+  Memory,
+  FloatingPoint,
+};
+
+struct MemoryOperand {
+  std::string segment;
+  std::string base;
+  std::string index;
+  std::int32_t scale{1};
+  std::int64_t displacement{};
+};
+
+struct Operand {
+  OperandKind kind{OperandKind::Invalid};
+  std::uint8_t size{};
+  std::uint8_t access{};
+  std::string register_name;
+  std::int64_t immediate{};
+  MemoryOperand memory;
+};
+
 class InstructionDecoder {
 public:
   virtual ~InstructionDecoder() = default;
@@ -29,6 +58,19 @@ struct Instruction {
   std::string operands;
 
   std::string text() const;
+
+  // Flow and operand metadata used by higher-level static analysis.
+  std::uint8_t size{};
+  std::vector<Operand> operand_details;
+  bool valid{true};
+  bool has_target{};
+  std::uint64_t target{};
+  bool is_branch{};
+  bool is_conditional{};
+  bool is_call{};
+  bool is_return{};
+  bool is_terminal{};
+  bool is_indirect{};
 };
 
 // Disassemble bytes as x86-64 instructions beginning at address.

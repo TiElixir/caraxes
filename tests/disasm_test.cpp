@@ -9,9 +9,17 @@ int main() {
   assert(instructions.size() == 4);
   assert(instructions[0].address == 0x401000);
   assert(instructions[0].mnemonic == "push");
+  assert(instructions[0].size == 1);
   assert(instructions[1].mnemonic == "mov");
   assert(instructions.back().mnemonic == "ret");
   assert(instructions.back().text() == "ret");
+
+  const auto call = caraxes::disasm::disassemble(
+      std::vector<std::uint8_t>{0xe8, 0x01, 0x00, 0x00, 0x00}, 0x401000);
+  assert(call.size() == 1);
+  assert(call.front().is_call);
+  assert(call.front().has_target);
+  assert(call.front().target == 0x401006);
 
   caraxes::disasm::X86_64InstructionDecoder decoder;
   const auto through_interface = caraxes::disasm::decode(decoder, bytes, 0x401000);

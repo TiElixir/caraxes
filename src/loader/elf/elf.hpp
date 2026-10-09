@@ -47,6 +47,16 @@ struct Symbol {
   bool dynamic{};
 };
 
+struct Relocation {
+  std::uint64_t offset{};
+  std::uint64_t info{};
+  std::uint64_t type{};
+  std::uint64_t symbol_index{};
+  std::int64_t addend{};
+  std::uint32_t section_index{};
+  std::string symbol_name;
+};
+
 struct Header {
   Class elf_class{};
   Endian endian{};
@@ -63,6 +73,12 @@ struct Header {
   std::uint16_t section_header_size{};
   std::uint16_t section_header_count{};
   std::uint16_t section_name_string_table_index{};
+  // Extended ELF numbering values. For ordinary files these mirror the
+  // 16-bit header fields; for PN_XNUM/SHN_XINDEX files they contain the
+  // resolved values stored in section header zero.
+  std::uint64_t program_header_count_full{};
+  std::uint64_t section_header_count_full{};
+  std::uint64_t section_name_string_table_index_full{};
 };
 
 struct File {
@@ -70,6 +86,7 @@ struct File {
   std::vector<ProgramHeader> program_headers;
   std::vector<SectionHeader> sections;
   std::vector<Symbol> symbols;
+  std::vector<Relocation> relocations;
   std::vector<std::uint8_t> bytes;
 
   const SectionHeader *section(const std::string &name) const;
