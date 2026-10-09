@@ -81,6 +81,7 @@ bool has_standard_declaration(const std::string &name) {
       "printf", "fprintf", "sprintf", "snprintf", "puts", "putchar",
       "malloc", "calloc", "realloc", "free", "memcpy", "memmove",
       "memset", "memcmp", "strcmp", "strncmp", "strlen", "abort",
+      "__isoc99_scanf",
       "exit", "atexit"};
   return names.contains(name);
 }
@@ -211,7 +212,12 @@ std::vector<RecoveredData> recover_data(
                                  file.bytes.begin() + file_offset + end,
                                  static_cast<std::uint8_t>(0));
       const auto length = static_cast<std::size_t>(nul - (file.bytes.begin() + file_offset));
-      bool printable = length >= 4;
+      bool has_format_specifier = false;
+      for (std::size_t i = 0; i + 1 < length; ++i)
+        if (file.bytes[file_offset + i] == '%' &&
+            file.bytes[file_offset + i + 1] != '%')
+          has_format_specifier = true;
+      bool printable = length >= 4 || has_format_specifier;
       for (std::size_t i = 0; printable && i < length; ++i)
         printable = std::isprint(
                         static_cast<unsigned char>(file.bytes[file_offset + i])) != 0 ||
@@ -239,6 +245,7 @@ ProjectResult decompile_project(const elf::File &file,
 
   Options function_options;
   function_options.function_names = options.function_names;
+  function_options.function_argument_counts = {};
   function_options.data_names = options.data_names;
   function_options.include_address_comments = options.include_address_comments;
   for (const auto &function : analysis.functions)
@@ -253,6 +260,7 @@ ProjectResult decompile_project(const elf::File &file,
        << "/* Expressions are inferred; unsupported operations remain annotated. */\n\n";
 
   code << "#include <stdint.h>\n#include <stddef.h>\n#include <stdio.h>\n\n"
+       << "int __isoc99_scanf(const char *, ...);\n\n"
        << "static uintptr_t call_indirect(uintptr_t target, ...) {\n"
        << "    (void)target;\n    return 0;\n}\n\n";
 
@@ -295,6 +303,15 @@ ProjectResult decompile_project(const elf::File &file,
 
   for (const auto &data : result.data)
     function_options.data_names[data.address] = data.name;
+  for (const auto &data : result.data)
+    if (data.string_literal)
+      function_options.data_values[data.name] = data.value;
+  for (const auto &function : analysis.functions) {
+    const auto bytes = function_bytes(file, executable_section, function);
+    if (!bytes.empty())
+      function_options.function_argument_counts[function.address] =
+          infer_argument_count(bytes, function.address);
+  }
 
   for (const auto &function : analysis.functions) {
     const auto bytes = function_bytes(file, executable_section, function);

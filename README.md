@@ -160,6 +160,8 @@ The repository includes an end-to-end behavior test for the sample program. It
 compiles `hello.c` with GCC, executes the original binary, recovers
 `recovered.c` with Caraxes, compiles the recovered source with GCC and strict
 warnings, executes it, and compares stdout, stderr, and exit status.
+The current interactive sample receives the deterministic test input `12` and
+`30`.
 
 Run it through CTest:
 

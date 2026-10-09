@@ -46,6 +46,7 @@ def main() -> int:
         original_run = subprocess.run(
             [str(original)],
             cwd=work,
+            input="12\n30\n",
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -68,6 +69,7 @@ def main() -> int:
         recovered_run = subprocess.run(
             [str(recovered)],
             cwd=work,
+            input="12\n30\n",
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

@@ -254,8 +254,10 @@ bool is_data_expression(const std::string &value,
 std::string assignment_expression(
     const std::string &value,
     const std::map<std::uint64_t, std::string> &data_names) {
-  return is_data_expression(value, data_names) ? "((uintptr_t)(" + value + "))"
-                                               : value;
+  if (is_data_expression(value, data_names) ||
+      (value.size() > 0 && value.front() == '&'))
+    return "((uintptr_t)(" + value + "))";
+  return value;
 }
 
 bool is_read_operand(const disasm::Instruction &instruction, std::size_t index,
@@ -408,6 +410,20 @@ std::string call_arguments(const RegisterValues &values,
   return stream.str();
 }
 
+std::size_t format_argument_count(const std::string &format) {
+  std::size_t count = 0;
+  for (std::size_t i = 0; i + 1 < format.size(); ++i) {
+    if (format[i] != '%')
+      continue;
+    if (format[i + 1] == '%') {
+      ++i;
+      continue;
+    }
+    ++count;
+  }
+  return count;
+}
+
 void assign_register(const disasm::Operand &destination,
                      const std::string &value, RegisterValues &values) {
   if (destination.kind == disasm::OperandKind::Register)
@@ -544,12 +560,22 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
       std::size_t argument_limit = argument_registers().size();
       if (instruction.has_target) {
         const auto callee = subroutine_name(instruction.target, options);
-        if (callee == "printf" || callee == "puts" || callee == "putchar")
-          argument_limit = callee == "printf" ? 2 : 1;
+        if (callee == "printf" || callee == "__isoc99_scanf") {
+          const auto format = options.data_values.find(
+              values.contains("rdi") ? values.at("rdi") : std::string{});
+          argument_limit = format == options.data_values.end()
+                               ? 2
+                               : 1 + format_argument_count(format->second);
+        } else if (callee == "puts" || callee == "putchar")
+          argument_limit = 1;
         else if (callee == "fprintf" || callee == "sprintf")
           argument_limit = 3;
         else if (callee == "snprintf")
           argument_limit = 4;
+        else if (const auto count = options.function_argument_counts.find(
+                     instruction.target);
+                 count != options.function_argument_counts.end())
+          argument_limit = count->second;
         call = callee + "(" +
                call_arguments(values, input_arguments, argument_limit) + ")";
       } else if (!operands.empty()) {
@@ -580,7 +606,12 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
     if (mnemonic == "mov" || mnemonic == "movabs" || mnemonic == "movzx" ||
         mnemonic == "movsx" || mnemonic == "movsxd" || mnemonic == "lea") {
       if (operands.size() >= 2) {
-        const auto right = expression(operands[1]);
+        auto right = expression(operands[1]);
+        if (mnemonic == "lea" &&
+            operands[1].kind == disasm::OperandKind::Memory &&
+            (operands[1].memory.base == "rbp" ||
+             operands[1].memory.base == "rsp"))
+          right = "&" + right;
         const auto destination = lvalue(operands[0]);
         if (operands[0].kind == disasm::OperandKind::Register)
           assign_register(operands[0], right, values);
@@ -684,6 +715,15 @@ Result decompile(const std::vector<std::uint8_t> &bytes, std::uint64_t address,
     body << "    /* no explicit return recovered */\n    return 0;\n";
   body << "}\n";
   return {safe_name, address, body.str()};
+}
+
+std::size_t infer_argument_count(const std::vector<std::uint8_t> &bytes,
+                                 std::uint64_t address) {
+  const auto arguments = infer_input_arguments(disasm::disassemble(bytes, address));
+  std::size_t count = 0;
+  for (const auto &register_name : arguments)
+    count = std::max(count, static_cast<std::size_t>(argument_index(register_name) + 1));
+  return count;
 }
 
 } // namespace caraxes::decompiler
